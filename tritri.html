@@ -52,12 +52,13 @@ function generate() {
 			tX *= triangleWidth - 1;
 			tY *= triangleHeight - 1;
 			path.transform("t" + tX + "," + tY);
-			path.grid = {x: x, y: y};
+			path.grid = {x: x, y: y, tx: tX, ty: tY};
 			path.neighbors = [];
 			path.energy = 0;
 			path.dissipation = Math.random();
 			path.power = Math.random();
 			path.phase = Math.random();
+			path.pace = Math.random();
 			path.hue = x / nX;
 			trianglesByCoords["" + x + "," + y] = path;
 			triangles.push(path);
@@ -84,10 +85,10 @@ function neighborize() {
 	});
 }
 
-function splat(t) {
-	t.energy += 1;
+function splat(t, v) {
+	t.energy += v;
 	t.neighbors.forEach(function(t2) {
-		t.energy += 0.3;
+		t.energy += v * 0.3;
 	});
 }
 
@@ -127,8 +128,11 @@ function HSVtoRGB(h, s, v) {
 function tick() {
 	var time = (+new Date()) / 1000;
 	triangles.forEach(function(triangle) {
+		if(triangle.active) splat(triangle, 0.7 + Math.cos(3 * time * -triangle.phase) * 0.4);
+	});
+	triangles.forEach(function(triangle) {
 		var energy = Math.max(0, Math.min(1, triangle.energy));
-		var b = lerp(0.1 + Math.cos(time * triangle.phase) * 0.1, 1, energy);
+		var b = lerp(0.1 + Math.cos(time * triangle.phase + triangle.pace) * 0.1, 1, energy);
 		var h = triangle.hue;// 0.5 - energy * 0.3;
 		var s = 0.4 + energy * 0.6;
 		var c = HSVtoRGB(h, s, b);
@@ -137,13 +141,14 @@ function tick() {
 		triangle.neighbors.forEach(function(neighbor){
 			newEnergy = Math.max(neighbor.energy, newEnergy);
 		});
+		//triangle.transform("t" + triangle.grid.tx + "," + triangle.grid.ty + " s" + (0.5 + energy * 0.5));
 
 		triangle.newEnergy = lerp(Math.max(energy, newEnergy), energy, 0.3 + triangle.power * 0.2);
 	});
 	triangles.forEach(function(t) {
 		t.energy = t.newEnergy;
-		var mul = 1 - t.dissipation * 0.7;
-		mul *= 1 - Math.abs(Math.sin(time * -t.phase) * 0.1);
+		var mul = 1 - t.dissipation * 0.5;
+		mul *= 1 - Math.abs(Math.sin(time - t.phase) * 0.1);
 		t.energy *= mul;
 	});
 }
@@ -153,7 +158,9 @@ generate();
 neighborize();
 
 triangles.forEach(function(t) {
-	t.node.addEventListener("click", function(){splat(t)});
+	t.node.addEventListener("click", function(){splat(t, 1)});
+	t.node.addEventListener("mouseover", function(){t.active=true});
+	t.node.addEventListener("mouseout", function(){t.active=false});
 });
 
 setInterval(tick, 1000 / 30);
