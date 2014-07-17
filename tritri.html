@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+	<meta charset="UTF-8">
+	<title></title>
+	<style>
+		html, body{margin:0; padding:0; overflow: hidden;background: #000}
+		svg { position:fixed; top:0; bottom:0; left:0; right:0 }
+		xsvg path { -webkit-transition: all 0.2s; }
+	</style>
+</head>
+<body>
+
+
+<script src="snap.svg.js"></script>
+<script src="gravelly/gravelly.js"></script>
+
+<script>
+var W = window.innerWidth, H = W;
+var triangleHeight = 0 | (H / 20);
+var triangleWidth = 0 | (triangleHeight * (Math.sqrt(3) / 2.0));
+var nX = 0 | (W / triangleWidth) + 1, nY = 0 | (H / triangleHeight) + 4;
+var s = Snap("100%", "100%");
+s.attr({
+	"preserveAspectRatio": "xMidYMin slice",
+	"viewBox": "0 0 " + W + " " + H
+});
+
+var g1 = Gravelly()
+		.moveTo(triangleWidth * -0.5, triangleHeight * -0.5)
+		.lineTo(triangleWidth * 0.5, 0)
+		.lineTo(triangleWidth * -0.5, triangleHeight * 0.5)
+		.close()
+		.toString();
+
+var g2 = Gravelly()
+		.moveTo(triangleWidth * 0.5, triangleHeight * -0.5)
+		.lineTo(triangleWidth * -0.5, 0)
+		.lineTo(triangleWidth * 0.5, triangleHeight * 0.5)
+		.close()
+		.toString();
+
+var triangles = [], trianglesByCoords = {};
+
+function generate() {
+
+	for (y = 0; y < nY; y++) {
+		for (x = 0; x < nX; x++) {
+			var path = s.path(y % 2 == 0 ? g2 : g1);
+			var tX = x;
+			var tY = (y - ((x % 2 == 0) ? 1 : 0)) / 2;
+			tX *= triangleWidth - 1;
+			tY *= triangleHeight - 1;
+			path.transform("t" + tX + "," + tY);
+			path.grid = {x: x, y: y};
+			path.neighbors = [];
+			path.energy = 0;
+			path.dissipation = Math.random();
+			path.power = Math.random();
+			path.phase = Math.random();
+			path.hue = x / nX;
+			trianglesByCoords["" + x + "," + y] = path;
+			triangles.push(path);
+		}
+	}
+
+}
+
+function neighborize() {
+	triangles.forEach(function(t) {
+		var x = t.grid.x;
+		var y = t.grid.y;
+		var yo = (x % 2 == 0 ? -1 : +1);
+		var xo = (y % 2 == 0 ? +1 : -1);
+		[
+			{x: x, y: y - 1},
+			{x: x, y: y + 1},
+			{x: x + xo, y: y + yo}
+		].forEach(function(rc) {
+			if (!rc) return;
+			var key = "" + rc.x + "," + rc.y;
+			if (trianglesByCoords[key]) t.neighbors.push(trianglesByCoords[key]);
+		});
+	});
+}
+
+function splat(t) {
+	t.energy += 1;
+	t.neighbors.forEach(function(t2) {
+		t.energy += 0.3;
+	});
+}
+
+function clamp(val, min, max) {
+	if(val < min) return min;
+	if(val > max) return max;
+	return val;
+}
+
+function lerp(a, b, alpha) {
+	alpha = clamp(alpha, 0, 1);
+	return a * (1 - alpha) + b * alpha;
+}
+
+function HSVtoRGB(h, s, v) {
+    var r, g, b, i, f, p, q, t;
+    i = Math.floor(h * 6);
+    f = h * 6 - i;
+    p = v * (1 - s);
+    q = v * (1 - f * s);
+    t = v * (1 - (1 - f) * s);
+    switch (i % 6) {
+        case 0: r = v, g = t, b = p; break;
+        case 1: r = q, g = v, b = p; break;
+        case 2: r = p, g = v, b = t; break;
+        case 3: r = p, g = q, b = v; break;
+        case 4: r = t, g = p, b = v; break;
+        case 5: r = v, g = p, b = q; break;
+    }
+    return {
+        r: Math.floor(r * 255),
+        g: Math.floor(g * 255),
+        b: Math.floor(b * 255)
+    };
+}
+
+function tick() {
+	var time = (+new Date()) / 1000;
+	triangles.forEach(function(triangle) {
+		var energy = Math.max(0, Math.min(1, triangle.energy));
+		var b = lerp(0.1 + Math.cos(time * triangle.phase) * 0.1, 1, energy);
+		var h = triangle.hue;// 0.5 - energy * 0.3;
+		var s = 0.4 + energy * 0.6;
+		var c = HSVtoRGB(h, s, b);
+		triangle.attr({fill: "rgb(" + c.r + "," + c.g + "," + c.b + ")"});
+		var newEnergy = 0;
+		triangle.neighbors.forEach(function(neighbor){
+			newEnergy = Math.max(neighbor.energy, newEnergy);
+		});
+
+		triangle.newEnergy = lerp(Math.max(energy, newEnergy), energy, 0.3 + triangle.power * 0.2);
+	});
+	triangles.forEach(function(t) {
+		t.energy = t.newEnergy;
+		var mul = 1 - t.dissipation * 0.7;
+		mul *= 1 - Math.abs(Math.sin(time * -t.phase) * 0.1);
+		t.energy *= mul;
+	});
+}
+
+
+generate();
+neighborize();
+
+triangles.forEach(function(t) {
+	t.node.addEventListener("click", function(){splat(t)});
+});
+
+setInterval(tick, 1000 / 30);
+
+//for()
+</script>
+</body>
+</html>
